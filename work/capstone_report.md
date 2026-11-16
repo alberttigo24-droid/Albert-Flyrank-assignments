@@ -8,7 +8,7 @@
 
 ## 0. Abstract
 
-This project asks whether observable content and search signals can help an editor prioritize pages for refresh review. It uses the 30,000-row anonymized FlyRank starter snapshot, with one row per pseudonymous content item and 32 pseudonymous clients. A transparent stale-and-visible rule is compared with logistic regression, a decision tree, and a random forest using a client-holdout evaluation where available. The committed pipeline report records a random-forest ROC AUC of 0.750 and Precision@50 of 0.740, compared with 0.627 and 0.240 for the rule baseline; the overall declining-label rate is 0.542. These results are decision-support evidence on a cross-sectional snapshot, not proof that refreshing a page will improve traffic and not a validated forecast of future decline.
+This project asks whether observable content and search signals can help an editor prioritize pages for refresh review. It uses the 30,000-row anonymized FlyRank starter snapshot, with one row per pseudonymous content item and 32 pseudonymous clients. A transparent stale-and-visible rule is compared with logistic regression, a decision tree, and a random forest using a client-holdout evaluation. The regenerated pipeline report records a random-forest ROC AUC of 0.750 and Precision@50 of 0.740, compared with 0.627 and 0.240 for the rule baseline; the overall declining-label rate is 0.542. These results are decision-support evidence on a cross-sectional snapshot, not proof that refreshing a page will improve traffic and not a validated forecast of future decline.
 
 ## 1. Problem framing
 
@@ -30,32 +30,32 @@ No raw client names, domains, URLs, titles, or search queries are used or publis
 
 The ML-07 baseline is intentionally readable: flag pages at least 180 days since their last update and with at least 500 impressions in the observed 90-day window. Its score is `stale × visible × impressions_90d`; its reason code is `stale_and_visible`, and its action is `review_refresh`.
 
-The saved baseline notebook observed 17 actionable pages among 30,000. For model comparison, the reference training script evaluates baseline scores on the same held-out rows as each model.
+The saved baseline notebook observed 17 actionable pages among 30,000. For model comparison, the training script evaluates baseline scores on the same held-out rows as each model.
 
 ## 4. Model and methodology
 
-The reference pipeline prepares features, creates the baseline, trains logistic regression, a depth-limited decision tree, and a random forest, then exports a ranked queue. The random forest uses 200 trees, maximum depth 10, minimum leaf size 25, balanced subsampling, and random seed 42. Categorical variables are one-hot encoded; numeric missing values are handled by the reference feature builder.
+The pipeline prepares features, creates the baseline, trains logistic regression, a depth-limited decision tree, and a random forest, then exports a ranked queue. The random forest uses 200 trees, maximum depth 10, minimum leaf size 25, balanced subsampling, and random seed 42. Categorical variables are one-hot encoded; numeric missing values are handled by the feature builder.
 
-The reference model feature list contains observed search, content-age, activity, CTR, position, engagement and scroll signals, plus selected content categories. It excludes the label fields and pseudonymous IDs. The target is a proxy for observed decline in the snapshot, not a verified editorial outcome.
+The regenerated model result contains 52 model features: 18 numeric inputs and 8 categorical source fields before one-hot expansion. It excludes label fields and pseudonymous IDs. The target is a proxy for observed decline in the snapshot, not a verified editorial outcome.
 
-The training script attempts a client-level holdout (about 20% of clients) and falls back to a stratified row split if the client holdout does not contain both target classes. The committed report states that the split used was `client_holdout`. This protects against direct row-level mixing across clients, but does not solve the temporal overlap described above.
+The training script used a client-level holdout (`client_holdout`): 27,675 training rows and 2,325 test rows in this run. This protects against direct row-level mixing across clients, but does not solve the temporal overlap described above.
 
 ## 5. Results
 
-The committed pipeline report records the following comparison. Precision@50 is measured on the held-out test set; the base rate is shown to contextualize it.
+The following values were checked against the regenerated `outputs/model_results.json` and `outputs/model_report.md`. Precision@50 is measured on the held-out test set; the overall positive-label rate is 0.542.
 
 | Method | ROC AUC | Average precision | Precision@50 | Recall | F1 |
 |---|---:|---:|---:|---:|---:|
-| Rule baseline | 0.627 | 0.468 | 0.240 | — | — |
-| Decision tree | 0.742 | 0.575 | 0.540 | 0.716 | 0.634 |
+| Rule baseline | 0.627 | 0.468 | 0.240 | 0.189 | 0.274 |
+| Decision tree | 0.742 | 0.575 | 0.580 | 0.716 | 0.634 |
 | Logistic regression | 0.700 | 0.522 | 0.400 | 0.567 | 0.566 |
 | Random forest | 0.750 | 0.618 | 0.740 | 0.744 | 0.640 |
 
-The random forest is selected by Precision@50. Its Precision@50 is 0.198 higher than the baseline (0.740 versus 0.240) on the reported evaluation. The positive-label base rate is 0.542, so the baseline's top-50 precision is below the overall positive rate; the random forest's is above it.
+The random forest is selected by Precision@50. Its Precision@50 is 0.500 higher than the baseline (0.740 versus 0.240) on the reported evaluation. The baseline's top-50 precision is below the overall positive rate; the random forest's is above it.
 
-The top reported random-forest features include days with impressions (0.1578), log impressions (0.1282), average position (0.1090), and content age (0.0955). These are plausible activity/visibility signals, but because the snapshot windows overlap the target window, their importance must not be interpreted as evidence of advance warning.
+The top random-forest features are days with impressions (0.1581), log impressions (0.1286), average position (0.1092), and content age (0.0952). These are plausible activity/visibility signals, but because the snapshot windows overlap the target window, their importance must not be interpreted as evidence of advance warning.
 
-**Reproducibility note:** these numbers are transcribed from the repository's committed `outputs/model_report.md`. The raw `model_results.json` and prediction CSV are generated artifacts and were not present in the repository when this report was prepared. Re-run the pipeline to regenerate them before treating this report as a fresh run.
+The regenerated queue contains 30,000 scored rows: 3,602 high-confidence, 11,398 medium-confidence, and 15,000 low-confidence items. Suggested actions are 13,083 monitor, 8,188 refresh, 6,654 refresh-and-review-CTR, 1,993 refresh-and-review-engagement, and 82 expand-and-refresh. Confidence bands and actions are triage labels, not calibrated probabilities of editorial success.
 
 ## 6. Limitations and honest framing
 
@@ -65,9 +65,9 @@ The top reported random-forest features include days with impressions (0.1578), 
 4. A client holdout tests transfer to held-out clients within this snapshot, not transfer across time.
 5. Feature importance is associative, not causal. It does not show that changing a feature or refreshing a page will improve performance.
 6. The queue is generated using model scores plus a baseline score and heuristic reason codes. Confidence bands are operational triage labels, not calibrated probabilities of editorial success.
-7. The report's metrics should be regenerated from a clean run; generated predictions and raw data should not be committed.
+7. The reported metrics are from a regenerated pipeline run. Generated predictions and raw per-page queues should not be committed.
 
-The correct claim is: **on the reported held-out split of this anonymized snapshot, the random forest ranked the proxy-declining label more effectively at the top 50 than the transparent rule baseline.** It does not establish that refresh actions cause recovery or that the model predicts future Google rankings.
+The correct claim is: **on the held-out clients in this anonymized snapshot, the random forest ranked the proxy-declining label more effectively at the top 50 than the transparent rule baseline.** It does not establish that refresh actions cause recovery or that the model predicts future rankings.
 
 ## 7. Ranked recommendations and action playbook
 
@@ -83,14 +83,14 @@ For every page, confirm the current URL and content manually in the authorized e
 
 ## 8. Reproducibility
 
-From a fresh clone:
+From a fresh clone with the anonymized starter CSV available at the documented path:
 
 ```bash
 pip install -r requirements.txt
 python scripts/run_all.py
 ```
 
-The reference pipeline writes processed features and predictions under `data/processed/` and reports/queues under `outputs/`. Random seed: 42. The dataset is the anonymized starter CSV already supplied by the repository. Generated datasets and per-page queues are not to be committed. The source report and scripts are committed; regenerate metrics locally before making a new performance claim.
+The pipeline writes processed features and predictions under `data/processed/` and reports/queues under `outputs/`. Random seed: 42. Generated datasets and per-page queues are not to be committed. The regenerated model results and report should be treated as the source of truth for metric values.
 
 ## 9. Acknowledgments and data credit
 
@@ -109,8 +109,8 @@ Built on the FlyRank ML Internship anonymized starter dataset and teaching pipel
 
 ## Social-post cut
 
-I built a content-refresh prioritization experiment using FlyRank's anonymized search dataset (30,000 pages). A transparent stale-and-visible rule was compared with three classifiers; the saved evaluation report records Random Forest Precision@50 of 0.74 versus 0.24 for the rule baseline. The key lesson was not just model performance: time-window alignment matters, and this single-snapshot experiment is a decision-support ranking exercise—not proof that refreshing content causes traffic recovery. Paper and reproducible code: https://github.com/alberttigo24-droid/Albert-Flyrank-assignments
+I built a content-refresh prioritization experiment using FlyRank's anonymized search dataset (30,000 pages). A transparent stale-and-visible rule was compared with three classifiers; the regenerated evaluation records Random Forest Precision@50 of 0.74 versus 0.24 for the rule baseline. The key lesson was not just model performance: time-window alignment matters, and this single-snapshot experiment is a decision-support ranking exercise—not proof that refreshing content causes traffic recovery. Paper and reproducible code: https://github.com/alberttigo24-droid/Albert-Flyrank-assignments
 
 ## Employer-facing summary
 
-I built an explainable content-refresh prioritization pipeline on a 30,000-row anonymized search dataset, including a rule baseline, three classifiers, client-holdout evaluation, reason codes and a ranked editorial review queue. The committed pipeline report records Random Forest ROC AUC 0.750 and Precision@50 0.740, compared with baseline Precision@50 0.240. I also documented the temporal-overlap limitation and framed the output as human-reviewed decision support rather than a future-performance or causal claim.
+I built an explainable content-refresh prioritization pipeline on a 30,000-row anonymized search dataset, including a rule baseline, three classifiers, client-holdout evaluation, reason codes and a ranked editorial review queue. The regenerated pipeline reports Random Forest ROC AUC 0.750 and Precision@50 0.740, compared with baseline Precision@50 0.240. I also documented the temporal-overlap limitation and framed the output as human-reviewed decision support rather than a future-performance or causal claim.
